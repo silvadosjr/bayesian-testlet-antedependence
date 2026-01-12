@@ -160,7 +160,9 @@ model{
   sigma_a ~ cauchy(0, 5);
 //   a~lognormal(log(1),sigma_a);
   b     ~ normal(0, sigma_b);
-  rho_global ~ normal(0, sigma_rho);     
+  for (k in 1:K){
+  segment(rho_global, rho_start[k], rho_len[k]) ~ normal(0, sigma_rho);
+ }
   
   // Likelihood via encadeamento:
   // (1) todos os itens dos testlets, seguindo a estrutura Phi_mat/D
