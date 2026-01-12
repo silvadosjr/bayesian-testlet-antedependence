@@ -1,13 +1,18 @@
 functions{
+  // Sum of all entries in a 2D integer array.
+  // Used in transformed data to pre-allocate the positions of Y==1 (positives).
   int sum2d(int[,] a){
     int s = 0;
     for (i in 1:size(a))
       s += sum(a[i]);
     return s;
   }
-// Constrói matriz de correlação L×L a partir de "rhovec":
-  //  - size(rhovec) == 1  -> HU (compound symmetry)
-  //  - size(rhovec) == L-1 -> HT (Toeplitz por lag)
+
+  // Build an L×L correlation matrix from a vector of correlations "rhovec":
+  //  - if size(rhovec) == 1     : HU (compound symmetry / exchangeable)
+  //      all off-diagonal correlations are equal to rhovec[1]
+  //  - if size(rhovec) == L - 1 : HT (Toeplitz-by-lag)
+  //      correlation depends on lag d = |i-j|, using rhovec[d], d=1..L-1
   matrix corr_from_rho(int L, vector rhovec) {
     matrix[L,L] R;
     int nr = rows(rhovec);
@@ -18,10 +23,10 @@ functions{
         } else {
           int d = abs(i - j);
           if (nr == 1) {
-            // HU: uma única correlação para todo par
+            // HU: single correlation for every pair
             R[i,j] = rhovec[1];
           } else {
-            // HT: correlação depende do lag d (1..L-1)
+            // HT: lag-dependent correlation
             R[i,j] = rhovec[d];
           }
         }
@@ -30,37 +35,61 @@ functions{
     return R;
   }
 }
+
 data{
-  int<lower=1> I;                 // nº total de itens
-  int<lower=1> K;                 // nº de testlets
-  int<lower=1> N;                 // nº de respondentes
-  int<lower=1> dk[K];             // início de cada testlet (1-based)
-  int<lower=1> nk[K];             // tamanho de cada testlet
-  int<lower=0> n_ind;             // nº de itens independentes = I - sum(nk)
-  int<lower=1,upper=I> ind_items[n_ind]; // índices dos itens independentes
+  // Dimensions
+  int<lower=1> I;                 // total number of items
+  int<lower=1> K;                 // number of testlets
+  int<lower=1> N;                 // number of respondents
+
+  // Testlet layout (1-based indexing)
+  int<lower=1> dk[K];             // starting index of each testlet block in the item vector
+  int<lower=1> nk[K];             // number of items within each testlet
+
+  // Independent (non-testlet) items
+  int<lower=0> n_ind;             // number of independent items = I - sum(nk)
+  int<lower=1,upper=I> ind_items[n_ind]; // item indices for independent items
+
+  // Binary responses (0/1). Missing must be handled before Stan (e.g., imputed or set to 0).
   int<lower=0,upper=1> Y[N,I];
 
-  // “ragged”: offsets/comprimentos dentro do vetor único de rho
-  int<lower=0> rho_len[K];        // qtde de rhos que o testlet k usa (1 se HU, nk[k]-1 se HT)
-  int<lower=1> rho_start[K];      // posição inicial (1-based) no vetor rho_global
+  // "Ragged" indexing into a single rho vector:
+  // each testlet k uses rho_len[k] correlations starting at rho_start[k].
+  int<lower=0> rho_len[K];        // number of rho's used by testlet k:
+                                 //   1 if HU, or nk[k]-1 if HT
+  int<lower=1> rho_start[K];      // starting position (1-based) in rho_global
 
-  int<lower=1> S_mc;              // nº de amostras MC p/ log_lik (ex.: 200)
-  
-//  real<lower=0> sigma_a;
+  // Monte Carlo size for approximating the testlet likelihood in generated quantities
+  // (used to estimate rectangle probabilities for the multivariate probit block)
+  int<lower=1> S_mc;
+
+  // Prior scales (sigma_a is treated as a parameter below; sigma_b and sigma_rho are data)
   real<lower=0> sigma_b;
   real<lower=0> sigma_rho;
 }
+
 transformed data {
-  // For latent variable representation
+  // Latent-variable augmentation for probit:
+  // For each response Y[n,i], introduce a latent Z[n,i] s.t.
+  //   Y=1 <=> Z>0 and Y=0 <=> Z<=0
+  //
+  // We store indices of positive and negative responses to declare truncated vectors
+  // Z_pos (lower=0) and Z_neg (upper=0), which speeds up sampling.
+  
+  // Adapted from: https://mc-stan.org/docs/2_18/stan-users-guide/multivariate-outcomes.html
+
   int<lower=0> N_pos;
-  int<lower=1,upper=N> n_pos[sum2d(Y)];
-  int<lower=1,upper=I> d_pos[size(n_pos)];
+  int<lower=1,upper=N> n_pos[sum2d(Y)];  // respondent indices for Y==1
+  int<lower=1,upper=I> d_pos[size(n_pos)]; // item indices for Y==1
+
   int<lower=0> N_neg;
-  int<lower=1,upper=N> n_neg[(N*I) - size(n_pos)];
-  int<lower=1,upper=I> d_neg[size(n_neg)];
+  int<lower=1,upper=N> n_neg[(N*I) - size(n_pos)]; // respondent indices for Y==0
+  int<lower=1,upper=I> d_neg[size(n_neg)];         // item indices for Y==0
 
   N_pos = size(n_pos);
   N_neg = size(n_neg);
+
+  // Populate (n_pos, d_pos) and (n_neg, d_neg) with the coordinates of Y==1 and Y==0
   {
     int i;
     int j;
@@ -81,73 +110,87 @@ transformed data {
     }
   }
 }
-parameters{
-  vector[N] theta;
-  vector<lower=0>[I] a;
-  vector[I] b;
 
-  // dados aumentados:
+parameters{
+  // Person parameters
+  vector[N] theta;             // latent traits
+
+  // Item parameters
+  vector<lower=0>[I] a;        // discriminations (positive)
+  vector[I] b;                 // difficulties
+
+  // Data augmentation: latent Z values (truncated to enforce Y)
   vector<lower=0>[N_pos] Z_pos;
   vector<upper=0>[N_neg] Z_neg;
 
-  // todos os rhos em um único vetor
+  // Global rho vector, concatenating all testlet correlation parameters
+  // (each testlet uses segment(rho_global, rho_start[k], rho_len[k]))
   vector<lower=-1,upper=1>[sum(rho_len)] rho_global;
-  real<lower=0> sigma_a;
-  
- // vector[sum(rho_len)] z_rho;   // sem limites
- 
-}
-transformed parameters{
-  matrix[N, I] eta;
-  matrix[N, I] Z;
-  
-//  vector[sum(rho_len)] rho_global;
-  
-//  rho_global = 2 * inv_logit(z_rho) - 1;  // mapeia R -> (-1,1)
 
-  // buffers gerais
+  // Prior scale for discriminations (treated hierarchically)
+  real<lower=0> sigma_a;
+
+  // Alternative unconstrained parameterization (commented out):
+  // vector[sum(rho_len)] z_rho;  // unconstrained, then map to (-1,1) via logistic
+}
+
+transformed parameters{
+  // Linear predictors and augmented latent matrix
+  matrix[N, I] eta;  // eta[n,i] = a[i] * (theta[n] - b[i])
+  matrix[N, I] Z;    // latent response matrix
+
+  // Matrices defining the antedependence / conditional regression representation
+  // for the testlet blocks:
+  //   Phi_mat: regression coefficients linking earlier Z's to later Z's (within each testlet)
+  //   D      : conditional variances (diagonal in this construction)
   matrix[I, I] Phi_mat;
   matrix[I, I] D;
 
-  // inicializa
+  // Initialize buffers
   Phi_mat = rep_matrix(0, I, I);
   D       = rep_matrix(0, I, I);
 
-  // linear predictor
+  // Compute linear predictor for all (n,i)
   for (n in 1:N)
     for (i in 1:I)
       eta[n,i] = a[i] * (theta[n] - b[i]);
 
+  // Fill the latent Z matrix using the truncated vectors
   for (n in 1:N_pos)
     Z[n_pos[n], d_pos[n]] = Z_pos[n];
   for (n in 1:N_neg)
     Z[n_neg[n], d_neg[n]] = Z_neg[n];
 
-  // monta cada bloco de testlet
+  // Build block-specific structures for each testlet and place them into
+  // the appropriate submatrices of Phi_mat and D.
   {
-    int off; off = 0; // não é usado aqui, mas deixo para clareza
+    int off; off = 0; // not used (left for clarity / possible future refactoring)
     for (k in 1:K) {
-      int L  = nk[k];
-      int i0 = dk[k];
+      int L  = nk[k];   // testlet size
+      int i0 = dk[k];   // starting item index for this testlet block
 
-      // pega o pedaço de rho deste testlet
+      // Extract rho segment for testlet k
       int rs = rho_start[k];
       int rl = rho_len[k];
 
-      // monta Sigma_k
-     vector[rl] rh = segment(rho_global, rs, rl);  // len = 1 (HU) ou L-1 (HT)
-     matrix[L,L] Sk = corr_from_rho(L, rh);
+      // Build testlet correlation matrix Sigma_k from rho parameters
+      vector[rl] rh = segment(rho_global, rs, rl); // length = 1 (HU) or L-1 (HT)
+      matrix[L,L] Sk = corr_from_rho(L, rh);
 
-      // decomposição de Cholesky e conversão para T e Phi 
+      // Convert correlation matrix to the antedependence form used in the likelihood.
+      // Steps:
+      //  1) Cholesky: Sk = Lk * Lk'
+      //  2) Normalize Lk to have unit diagonal, move scaling into Dk
+      //  3) Tk = inv(Lk) and Phik = I - Tk  (regression coefficients)
       {
         matrix[L,L] Lk  = cholesky_decompose(Sk);
         matrix[L,L] Dk  = diag_matrix(diagonal(Lk));
-        Lk = Lk * inverse(Dk);
-        Dk = Dk * Dk;
+        Lk = Lk * inverse(Dk);   // now diag(Lk) = 1
+        Dk = Dk * Dk;            // conditional variance scaling
         matrix[L,L] Tk  = inverse(Lk);
         matrix[L,L] Phik = diag_matrix(rep_vector(1, L)) - Tk;
 
-        // cola nos blocos
+        // Paste block matrices into the global I×I containers
         for (i in 1:L) {
           for (j in 1:L) {
             Phi_mat[i0 + i - 1, i0 + j - 1] = Phik[i, j];
@@ -158,51 +201,77 @@ transformed parameters{
     }
   }
 }
+
 model{
-  // Priors
-   theta ~ normal(0, 1);
-  a     ~ gamma(1 / square(sigma_a), 1 / square(sigma_a));
+  // ------------------------------- Priors ------------------------------------
+  theta ~ normal(0, 1);
+
+  // Discrimination prior: gamma with mean ~ 1 and variance controlled by sigma_a
+  // Using shape=1/sigma_a^2, rate=1/sigma_a^2 implies E[a]=1 and Var[a]=sigma_a^2.
+  a ~ gamma(1 / square(sigma_a), 1 / square(sigma_a));
   sigma_a ~ cauchy(0, 5);
-//   a~lognormal(log(1),sigma_a);
-  b     ~ normal(0, sigma_b);
-  //rho_global ~ normal(0, sigma_rho);      
+
+  // Difficulty prior
+  b ~ normal(0, sigma_b);
+
+  // Rho priors: independent normals within each testlet segment
+  // (segment-wise, allowing different lengths per testlet)
   for (k in 1:K){
-  segment(rho_global, rho_start[k], rho_len[k]) ~ normal(0, sigma_rho);
- }
+    segment(rho_global, rho_start[k], rho_len[k]) ~ normal(0, sigma_rho);
+  }
 
+  // ----------------------------- Likelihood ----------------------------------
+  // Latent-variable likelihood using the conditional (antedependence) factorization.
+  // For each respondent n:
+  //  (1) For each testlet block, evaluate the sequential conditional normals defined
+  //      by Phi_mat and D (within-testlet dependence).
+  //  (2) For independent items, use N(eta, 1) for the latent Z.
 
-  // Likelihood via encadeamento (igual ao seu — agora em 2 passos):
-  // (1) todos os itens dos testlets, seguindo a estrutura Phi_mat/D
   for (n in 1:N){
+    // (1) Testlet blocks
     for (k in 1:K){
       int L  = nk[k];
       int i0 = dk[k];
 
-      // primeiro do bloco
+      // First item in block: marginal N(eta, sqrt(Dii))
       target += normal_lpdf(Z[n, i0] | eta[n, i0], sqrt(D[i0, i0]));
-      // demais do bloco (regressões condicionais)
+
+      // Remaining items: conditional regressions on previous Z's within the testlet
       if (L >= 2){
         for (ii in 2:L){
           int i = i0 + ii - 1;
+
+          // Conditional mean starts at eta[n,i] then adds regression terms
           real pred = eta[n, i];
+
+          // Regress on previous positions in this testlet block
+          // (kk indexes earlier items in the block)
           for (kk in 0:(ii-2)) {
             int j = i0 + kk;
             pred += Phi_mat[i, j] * (Z[n, j] - eta[n, j]);
           }
+
           target += normal_lpdf(Z[n, i] | pred, sqrt(D[i, i]));
         }
       }
     }
-    // (2) itens independentes (variância 1)
+
+    // (2) Independent items: latent Z ~ N(eta, 1)
     for (h in 1:n_ind) {
       int i = ind_items[h];
       target += normal_lpdf(Z[n, i] | eta[n, i], 1);
     }
   }
 }
+
 generated quantities {
+  // Pointwise log-likelihood (one value per respondent) to support LOO, etc.
+  // For independent items: exact Bernoulli-probit marginal likelihood.
+  // For testlets: MC approximation of the multivariate probit rectangle probability.
+
   vector[N] log_lik;
 
+  // Determine maximum testlet size to allocate fixed-size buffers (Stan requires static sizes)
   int max_nk;
   max_nk = nk[1];
   for (k in 2:K) if (nk[k] > max_nk) max_nk = nk[k];
@@ -210,7 +279,7 @@ generated quantities {
   for (n in 1:N) {
     real ll = 0;
 
-    // 1) independentes: Bernoulli-probit marginal
+    // 1) Independent items: exact Bernoulli-probit contribution
     for (h in 1:n_ind) {
       int i = ind_items[h];
       real eta_ni = a[i] * (theta[n] - b[i]);
@@ -218,45 +287,54 @@ generated quantities {
       else              ll += log1m(Phi(eta_ni));
     }
 
-    // 2) testlets: prob. retângulo MVN via MC
+    // 2) Testlets: MC estimate of P(Z matches Y sign constraints) under MVN
     for (k in 1:K) {
       int L  = nk[k];
       int i0 = dk[k];
 
-      // pega rho do k
+      // Extract rho segment for testlet k
       int rs = rho_start[k];
       int rl = rho_len[k];
 
-      // buffers de tamanho fixo
+      // Fixed-size buffers (only first 1..L entries used)
       vector[max_nk] mu = rep_vector(0, max_nk);
       matrix[max_nk, max_nk] Sigma = diag_matrix(rep_vector(1.0, max_nk));
 
-      // média (somente 1..L)
+      // Mean vector for latent Z in this testlet block
       for (t in 1:L) {
         int i = i0 + t - 1;
         mu[t] = a[i] * (theta[n] - b[i]);
       }
 
-      // Sigma_k
+      // Correlation matrix for this testlet block
       vector[rl] rh = segment(rho_global, rs, rl);
       matrix[L,L] Sk = corr_from_rho(L, rh);
 
-    for (i in 1:L) for (j in 1:L) Sigma[i,j] = Sk[i,j];  // copia para buffer de tamanho fixo
+      // Copy into the fixed-size covariance buffer
+      for (i in 1:L) for (j in 1:L) Sigma[i,j] = Sk[i,j];
 
-      // Monte Carlo
+      // Monte Carlo rectangle probability:
+      // Draw z ~ MVN(mu, Sigma) and check sign constraints implied by Y.
       {
         int hit = 0;
         for (s in 1:S_mc) {
           vector[max_nk] z_full = multi_normal_rng(mu, Sigma);
           int ok = 1;
+
+          // Check sign constraints item-by-item within the testlet
           for (t in 1:L) {
             int i = i0 + t - 1;
-            if (Y[n, i] == 1) { if (!(z_full[t] > 0)) { ok = 0; break; } }
-            else              { if (!(z_full[t] <= 0)) { ok = 0; break; } }
+            if (Y[n, i] == 1) {
+              if (!(z_full[t] > 0)) { ok = 0; break; }
+            } else {
+              if (!(z_full[t] <= 0)) { ok = 0; break; }
+            }
           }
           hit += ok;
         }
-        real p_hat = (hit + 0.5) / (S_mc + 1.0); // Laplace
+
+        // Laplace smoothing to avoid log(0) when hit=0
+        real p_hat = (hit + 0.5) / (S_mc + 1.0);
         ll += log(p_hat);
       }
     }
@@ -265,22 +343,21 @@ generated quantities {
   }
 }
 
+//// ---------------------------------------------------------------------------
+//// Alternative (commented out) generated quantities:
+//// Computes log-lik under local independence for all items using Bernoulli-probit.
+//// This is NOT appropriate for the dependent testlet blocks, but can be useful
+//// for debugging / comparison.
+//// ---------------------------------------------------------------------------
 // generated quantities{
 //   vector[N] log_lik;
-// //  vector<lower=0,upper=1>[vI] prob_pred[N];
 //   for (n in 1:N) {
-//       real ll = 0;
-//       for (i in 1:I) {
-//        real pred = a[i] * (theta[n] - b[i]);
-//         if (Y[n, i] == 1) {
-//           ll += log(Phi(pred));
-//         } else {
-//           ll += log1m(Phi(pred));  // numericamente estável
-//         }
-//       }
-// //      prob_pred[n,i] =Phi_approx(a[i]*(theta[n] - b[i]));
-//       log_lik[n] = ll;    //bernoulli_lpmf(Y[n,i]|prob_pred[n,i]);
+//     real ll = 0;
+//     for (i in 1:I) {
+//       real pred = a[i] * (theta[n] - b[i]);
+//       if (Y[n, i] == 1) ll += log(Phi(pred));
+//       else              ll += log1m(Phi(pred));
 //     }
+//     log_lik[n] = ll;
+//   }
 // }
-
-
