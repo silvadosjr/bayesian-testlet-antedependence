@@ -32,7 +32,7 @@
 
 ## -------------------- 0) Paths and helper sources ----------------------------
 root_local <- "~/GitHub/bayesian-testlet-antedependence"
-path_project <- "~/GitHub/bayesian-testlet-antedependence/Real Data Analysis"
+path_project <- "~/GitHub/bayesian-testlet-antedependence/Real Data Analysis/Small Reading Test"
 stopifnot(dir.exists(root_local), dir.exists(path_project))
 
 setwd(path_project)
