@@ -467,20 +467,32 @@ for (p in sort(unique(bias_long$param))) {
          gp, width = 1400, height = 800, units = "px", dpi = 120)
 }
 
+
+param_labels <- c(
+  a     = "Discrimination",
+  b     = "Difficulty",
+  rho   = "Correlation",
+  theta = "Ability"
+)
+
 ## 2) Combined panel (facet by parameter)
 gp_all <- ggplot(bias_long, aes(x = scenario, y = bias, fill = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(outlier.alpha = 0.35, position = position_dodge(width = 0.8)) +
-  labs(
-    title = "Bias distribution by scenario (2PP vs Testlet2PP)",
-    x = "Scenario (K, nk, tag)",
-    y = "Bias"
+  labs(title = "", x = "Scenario", y = "Bias") +
+  facet_wrap(~ param, scales = "free_y", ncol = 2,
+             labeller = as_labeller(param_labels)) +
+  theme_minimal(base_size = 16) +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title  = element_text(face = "bold", size = 18),  
+    strip.text  = element_text(size = 14, face = "bold"),  
+    axis.title  = element_text(size = 14),                 
+    legend.text = element_text(size = 12),                 
+    legend.title = element_text(size = 13)                 
   ) +
-  facet_wrap(~ param, scales = "free_y", ncol = 2) +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(face = "bold")) +
   add_model_greys()
+
 
 ggsave(file.path(pathResults, "cmp_boxplot_bias_por_cenario_todos.pdf"),
        gp_all, width = 12.5, height = 9)
@@ -554,10 +566,17 @@ gp_rmse_all <- ggplot(rmse_rep, aes(x = scenario, y = RMSE, fill = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(outlier.alpha = 0.4, position = position_dodge(width = 0.8)) +
   labs(title = "", x = "Scenario", y = "RMSE", fill = "Model") +
-  facet_wrap(~ param, scales = "free_y", ncol = 2) +
-  theme_minimal(base_size = 13) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-        plot.title = element_text(face = "bold")) +
+  facet_wrap(~ param, scales = "free_y", ncol = 2,
+             labeller = as_labeller(param_labels)) +
+  theme_minimal(base_size = 16) +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title  = element_text(face = "bold", size = 18),  
+    strip.text  = element_text(size = 14, face = "bold"),  
+    axis.title  = element_text(size = 14),                 
+    legend.text = element_text(size = 12),                 
+    legend.title = element_text(size = 13)                 
+  ) +
   add_model_greys()
 
 ggsave(file.path(pathResults, "cmp_boxplot_RMSE_por_cenario_todos.pdf"),
@@ -604,10 +623,17 @@ gp_ess_all <- ggplot(ess_rep, aes(x = scenario, y = ESS, fill = model)) +
   geom_hline(yintercept = 100, linetype = "dashed") +
   geom_boxplot(outlier.alpha = 0.4, position = position_dodge(width = 0.8)) +
   labs(title = "", x = "Scenario", y = "ESS", fill = "Model") +
-  facet_wrap(~ param, scales = "free_y", ncol = 2) +
-  theme_minimal(base_size = 13) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-        plot.title = element_text(face = "bold")) +
+  facet_wrap(~ param, scales = "free_y", ncol = 2,
+             labeller = as_labeller(param_labels)) +
+  theme_minimal(base_size = 16) +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title  = element_text(face = "bold", size = 18),  
+    strip.text  = element_text(size = 14, face = "bold"),  
+    axis.title  = element_text(size = 14),                 
+    legend.text = element_text(size = 12),                 
+    legend.title = element_text(size = 13)                 
+  ) +
   add_model_greys()
 
 ggsave(file.path(pathResults, "cmp_boxplot_ESS_por_cenario_todos.pdf"),
@@ -654,10 +680,17 @@ gp_rhat_all <- ggplot(rhat_rep, aes(x = scenario, y = Rhat, fill = model)) +
   geom_hline(yintercept = 1, linetype = "dashed") +
   geom_boxplot(outlier.alpha = 0.4, position = position_dodge(width = 0.8)) +
   labs(title = "", x = "Scenario", y = "Rhat", fill = "Model") +
-  facet_wrap(~ param, scales = "free_y", ncol = 2) +
-  theme_minimal(base_size = 13) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-        plot.title = element_text(face = "bold")) +
+  facet_wrap(~ param, scales = "free_y", ncol = 2,
+             labeller = as_labeller(param_labels)) +
+  theme_minimal(base_size = 16) +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title  = element_text(face = "bold", size = 18),  
+    strip.text  = element_text(size = 14, face = "bold"),  
+    axis.title  = element_text(size = 14),                 
+    legend.text = element_text(size = 12),                 
+    legend.title = element_text(size = 13)                 
+  ) +
   add_model_greys()
 
 ggsave(file.path(pathResults, "cmp_boxplot_Rhat_por_cenario_todos.pdf"),
