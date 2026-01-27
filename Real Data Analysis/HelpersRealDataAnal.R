@@ -1372,6 +1372,60 @@ plot_q3_ecdf_envelope_gray <- function(df_env,
 }
 
 
+plot_q3_ecdf_envelope_gray_eps <- function(df_env,
+                                           line_size = 0.9,
+                                           base_size = 13,
+                                           title = '',
+                                           subtitle = '',
+                                           fill_gray = "gray85"  # cinza mais claro (simula alpha)
+) {
+  df_env <- df_env %>%
+    dplyr::mutate(
+      model = factor(model, levels = c("Testlet 2PP", "2PP")),
+      facet = factor(facet, levels = unique(facet))
+    )
+  
+  df_ribbon <- df_env
+  df_curve  <- df_env %>% dplyr::select(model, facet, x, F_obs)
+  
+  ggplot() +
+    # envelope cinza uniforme (EPS-safe: sem alpha)
+    geom_ribbon(
+      data = df_ribbon,
+      aes(
+        x = x, ymin = F_low, ymax = F_high,
+        group = interaction(model, facet)
+      ),
+      fill = fill_gray, alpha = 1, inherit.aes = FALSE
+    ) +
+    # curvas observadas
+    geom_line(
+      data = df_curve,
+      aes(x = x, y = F_obs, linetype = model),
+      linewidth = line_size, color = "black"
+    ) +
+    facet_grid(
+      ~ model + facet, scales = "free_x", switch = "x",
+      labeller = labeller(model = ~ "", facet = label_value)
+    ) +
+    scale_linetype_manual(values = c("solid", "dashed"), name = NULL) +
+    labs(
+      x = expression(Q[3]), y = "ECDF",
+      title = title, subtitle = subtitle
+    ) +
+    theme_minimal(base_size = base_size) +
+    theme(
+      strip.text = element_text(face = "bold"),
+      strip.background.x = element_blank(),
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      legend.key.width = unit(1.5, "cm")
+    )
+}
+
+
+
+
 
 # Salva em PDF com tamanho fixo (cm) e, se disponível, incorpora fontes (cairo_pdf)
 save_q3_ecdf_envelope_pdf <- function(df_env,
@@ -1386,6 +1440,64 @@ save_q3_ecdf_envelope_pdf <- function(df_env,
          width = width_cm, height = height_cm, units = "cm",
          device = dev_fun, dpi = 300)
   message(sprintf("Figura salva em '%s' (%gx%g cm).", file, width_cm, height_cm))
+  invisible(p)
+}
+
+
+
+save_delta_q3_heatmap_eps <- function(df_testlet, df_2pp = NULL,
+                                      diff_only = FALSE,
+                                      file = "Fig_DeltaQ3_heatmap.eps",
+                                      width_cm = 18, height_cm = 10,
+                                      keep_pdf = FALSE,
+                                      embed_fonts = TRUE) {
+  
+  p <- plot_delta_q3_heatmap(df_testlet, df_2pp, diff_only = diff_only)
+  
+  # --- output EPS path (absolute) ---
+  if (!grepl("\\.eps$", file, ignore.case = TRUE)) file <- paste0(file, ".eps")
+  out_eps <- normalizePath(file, winslash = "/", mustWork = FALSE)
+  
+  # --- temporary PDF (same folder) ---
+  out_dir <- dirname(out_eps)
+  pdf_tmp <- file.path(out_dir, paste0(tools::file_path_sans_ext(basename(out_eps)), ".tmp.pdf"))
+  pdf_tmp <- normalizePath(pdf_tmp, winslash = "/", mustWork = FALSE)
+  
+  # 1) Save PDF first
+  dev_fun <- if (embed_fonts && capabilities("cairo")) cairo_pdf else "pdf"
+  ggsave(filename = pdf_tmp, plot = p,
+         width = width_cm, height = height_cm, units = "cm",
+         device = dev_fun, dpi = 300)
+  
+  if (!file.exists(pdf_tmp)) stop("Temporary PDF was not created: ", pdf_tmp, call. = FALSE)
+  
+  # 2) Convert PDF -> EPS
+  pdftops <- Sys.which("pdftops")
+  gs <- Sys.which(c("gswin64c", "gswin32c", "gs"))
+  gs <- gs[gs != ""][1]
+  
+  if (pdftops != "") {
+    # poppler-utils (Linux/WSL)
+    system2(pdftops, args = c("-eps", shQuote(pdf_tmp), shQuote(out_eps)))
+  } else if (!is.na(gs) && nzchar(gs)) {
+    # Ghostscript (Windows/general)
+    system2(gs, args = c(
+      "-dSAFER", "-dBATCH", "-dNOPAUSE",
+      "-sDEVICE=eps2write",
+      paste0("-sOutputFile=", out_eps),
+      pdf_tmp
+    ))
+  } else {
+    stop("Neither 'pdftops' nor Ghostscript found on PATH.", call. = FALSE)
+  }
+  
+  if (!file.exists(out_eps) || file.info(out_eps)$size == 0) {
+    stop("Failed converting PDF to EPS: ", out_eps, call. = FALSE)
+  }
+  
+  if (!keep_pdf && file.exists(pdf_tmp)) file.remove(pdf_tmp)
+  
+  message(sprintf("Mapa de calor salvo em '%s'.", out_eps))
   invisible(p)
 }
 

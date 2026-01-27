@@ -67,7 +67,7 @@ toc <- function(t0)  { cat(sprintf("[ END ] Elapsed: %s\n", Sys.time() - t0)) }
 pathProgram <- here(root_local, "Programs")
 
 ## Source helper functions used for indexing + diagnostics (Q3, envelopes, heatmaps, etc.)
-source(here(path_project, "HelpersRealDataAnal.R"))
+source(here('Real Data Analysis', "HelpersRealDataAnal.R"))
 
 ## Output directories
 pathFit <- here(path_project, "Fit")
@@ -284,14 +284,17 @@ env_2pp <- q3_envelope_data(
 df_plot <- dplyr::bind_rows(env_test, env_2pp)
 
 ## Plot in grayscale and save
-p_env <- plot_q3_ecdf_envelope_gray(df_plot)
+p_env <- plot_q3_ecdf_envelope_gray_eps(df_plot)
+
 ggsave(
-  file.path(saveFigures, "ECDF_SmallReading.pdf"),
+  file.path(saveFigures, "ECDF_SmallReading.eps"),
   p_env,
   width  = 10,
   height = 5,
   units  = "in"
 )
+
+
 
 
 ## ------------------------- Q3 envelopes — GLOBAL -----------------------------
@@ -321,6 +324,9 @@ env_2pp_g <- q3_envelope_data(
 )
 
 p_env_g <- plot_q3_ecdf_envelope_gray(bind_rows(env_test_g, env_2pp_g))
+
+
+p_env_g <- plot_q3_ecdf_envelope_gray_eps(bind_rows(env_test_g, env_2pp_g))
 
 ggsave(
   file.path(saveFigures, "ECDF_Global_SmallReading.pdf"),
@@ -361,12 +367,24 @@ save_delta_q3_heatmap_pdf(
   file      = file.path(saveFigures, "Heatmap_DeltaQ3_Testlet_vs_2PP_SmallReading.pdf")
 )
 
+
+save_delta_q3_heatmap_eps(
+  df_testlet,
+  df_2pp,
+  diff_only = FALSE,
+  file      = file.path(saveFigures, "Heatmap_DeltaQ3_Testlet_vs_2PP_SmallReading.eps")
+)
+
+
+
+
+
 ## Save heatmaps: differences only
 save_delta_q3_heatmap_pdf(
   df_testlet,
   df_2pp,
   diff_only = TRUE,
-  file      = file.path(saveFigures, "Heatmap_DeltaQ3_Diferencas_SmallReading.pdf")
+  file      = file.path(saveFigures, "Heatmap_DeltaQ3_Diferencas_SmallReading.eps")
 )
 
 

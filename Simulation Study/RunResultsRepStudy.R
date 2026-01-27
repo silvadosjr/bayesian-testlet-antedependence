@@ -476,9 +476,13 @@ param_labels <- c(
 )
 
 ## 2) Combined panel (facet by parameter)
+
+#setEPS()
+#postscript(file = file.path(pathResults, "cmp_boxplot_bias_por_cenario_todos.eps"),width =12.5, height = 9)
+
 gp_all <- ggplot(bias_long, aes(x = scenario, y = bias, fill = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_boxplot(outlier.alpha = 0.35, position = position_dodge(width = 0.8)) +
+  geom_boxplot(outlier.alpha = 1, position = position_dodge(width = 0.8)) +
   labs(title = "", x = "Scenario", y = "Bias") +
   facet_wrap(~ param, scales = "free_y", ncol = 2,
              labeller = as_labeller(param_labels)) +
@@ -494,7 +498,9 @@ gp_all <- ggplot(bias_long, aes(x = scenario, y = bias, fill = model)) +
   add_model_greys()
 
 
-ggsave(file.path(pathResults, "cmp_boxplot_bias_por_cenario_todos.pdf"),
+
+
+ggsave(file.path(pathResults, "cmp_boxplot_bias_por_cenario_todos.eps"),
        gp_all, width = 12.5, height = 9)
 
 ggsave(file.path(pathResults, "cmp_boxplot_bias_por_cenario_todos.png"),
@@ -562,9 +568,10 @@ for (p in sort(unique(rmse_rep$param))) {
          gp, width = 1400, height = 800, units = "px", dpi = 120)
 }
 
+
 gp_rmse_all <- ggplot(rmse_rep, aes(x = scenario, y = RMSE, fill = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_boxplot(outlier.alpha = 0.4, position = position_dodge(width = 0.8)) +
+  geom_boxplot(outlier.alpha = 1, position = position_dodge(width = 0.8)) +
   labs(title = "", x = "Scenario", y = "RMSE", fill = "Model") +
   facet_wrap(~ param, scales = "free_y", ncol = 2,
              labeller = as_labeller(param_labels)) +
@@ -579,7 +586,10 @@ gp_rmse_all <- ggplot(rmse_rep, aes(x = scenario, y = RMSE, fill = model)) +
   ) +
   add_model_greys()
 
-ggsave(file.path(pathResults, "cmp_boxplot_RMSE_por_cenario_todos.pdf"),
+
+
+
+ggsave(file.path(pathResults, "cmp_boxplot_RMSE_por_cenario_todos.eps"),
        gp_rmse_all, width = 12.5, height = 9)
 
 ggsave(file.path(pathResults, "cmp_boxplot_RMSE_por_cenario_todos.png"),
