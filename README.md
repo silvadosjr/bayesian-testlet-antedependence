@@ -36,9 +36,7 @@ In addition to model fitting, the repo includes a full workflow for:
 
 ### 1) Standard 2PP (probit)
 Assumes local independence across items:
-\[
-P(Y_{ni}=1 \mid \theta_n,a_i,b_i)=\Phi\big(a_i(\theta_n-b_i)\big).
-\]
+$$P(Y_{ni}=1 \mid \theta_n)=\Phi\big(a_i(\theta_n-b_i)\big).$$
 
 ### 2) Testlet 2PP (probit) with residual dependence
 Items are partitioned into testlets; within each testlet, residuals are correlated via a block correlation matrix:
