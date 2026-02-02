@@ -78,5 +78,5 @@ If you use this repository in academic work, please cite the following manuscrip
 
 Santos, J. R. S., & Andrade, J. A. A. (Accepted Manuscript).  
 **Bayesian Modeling of Local Item Dependence in IRT Testlet Data Using Antedependence Models.**  
-*Journal of Educational and Behavioral Statistics.*
+*Journal of Educational and Behavioral Statistics, 2026.*
 
