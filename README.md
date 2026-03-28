@@ -74,7 +74,7 @@ All simulation studies and empirical analyses are fully reproducible using the s
 
 ## Citation
 
-If you use this repository in academic work, please cite the following manuscript:
+If you use this repository in academic work, please cite the following article:
 
 Santos, J. R. S. dos, & Andrade, J. A. A. (2026). Bayesian Modeling of Local Item Dependence in IRT Testlet Data Using Antedependence Models. Journal of Educational and Behavioral Statistics, 0(0).
 
